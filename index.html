@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6학년 담임 선생님 타이머</title>
+
+<style>
+/* ================= ANIMATIONS ================= */
+.falling-emoji {
+  position: fixed;
+  top: -50px;
+  z-index: 9999;
+  pointer-events: none;
+  font-size: 24px;
+  animation: fall linear forwards;
+}
+@keyframes fall {
+  to { transform: translateY(110vh) rotate(360deg); }
+}
+
+/* ================= THEME & LAYOUT ================= */
+body {
+  background: #fffdf0; 
+  font-family: 'Malgun Gothic', Arial;
+  color: #7a6a41; 
+  text-align: center;
+  margin: 0;
+  padding: 20px;
+  overflow-x: hidden;
+}
+h2 { margin: 10px 0; cursor: pointer; color: #d4a017; }
+#clockBox { margin: auto; width: 320px; height: 320px; display: flex; align-items: center; justify-content: center; }
+canvas { background: white; border-radius: 50%; box-shadow: 0 0 20px rgba(212, 160, 23, 0.1); border: 8px solid #fcf2d1; }
+
+#periodLabel { font-size: 22px; font-weight: bold; margin-top: 10px; }
+#info { margin-top: 20px; font-size: 18px; color: #a3946d; }
+
+table {
+  margin: auto; margin-top: 20px; border-collapse: collapse; width: 95%; max-width: 400px; 
+  background: white; border-radius: 15px; overflow: hidden;
+}
+th, td { padding: 10px; border-bottom: 1px solid #fffdf0; }
+th { color: white; background: #f2d98d; }
+
+/* The "Gray" Subjects Highlight from the Image - Warm Yellow */
+.specialClass { background: #fdf5d2 !important; color: #8a7316; font-weight: bold; }
+
+.currentClass { background: #fff9e6 !important; border: 2px solid #f2d98d; font-weight: bold; box-shadow: inset 0 0 10px rgba(212, 160, 23, 0.1); }
+.prepPeriod { color: #a3946d !important; } 
+.lunchText { color: #f2b400; font-weight: bold; }
+.periodTime { font-size: 10px; color: #ccc; margin-right: 5px; display: none; }
+#scheduleTable td:hover .periodTime { display: inline; }
+
+#weekPopup {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(255, 253, 240, 0.9); display: none; align-items: center; justify-content: center; z-index: 1000;
+}
+#weekBox {
+  background: white; padding: 20px; border-radius: 20px; width: 95%; max-width: 600px;
+  border: 4px solid #fcf2d1; color: #7a6a41;
+}
+#weekTable { width: 100%; border-collapse: collapse; text-align: center; }
+#weekTable th { background: #fcf2d1; color: #7a6a41; padding: 8px; }
+#weekTable td { padding: 10px; border-top: 1px solid #fffdf0; font-size: 13px; }
+
+/* Styling for the popup version of special classes */
+.weekSpecial { background: #fdf5d2; font-weight: bold; }
+</style>
+</head>
+
+<body>
+
+<h2 id="today"></h2>
+
+<div id="clockBox">
+<canvas id="clock" width="300" height="300"></canvas>
+</div>
+
+<div id="periodLabel"></div>
+
+<div id="info">
+<div id="weather">날씨 불러오는 중...</div>
+<div id="air">미세먼지 불러오는 중...</div>
+</div>
+
+<table id="scheduleTable">
+<tr><th>교시</th><th>과목</th></tr>
+</table>
+
+<div id="weekPopup">
+<div id="weekBox">
+<h3>🌼 6학년 주간 시간표 🌼</h3>
+<table id="weekTable">
+<tr><th>교시</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th></tr>
+<tr><td>1교시</td><td class="weekSpecial">과학</td><td>국어</td><td>도덕</td><td class="weekSpecial">과학</td><td>국어</td></tr>
+<tr><td>2교시</td><td>국어</td><td>국어</td><td class="weekSpecial">영어(B)</td><td>국어</td><td class="weekSpecial">미술</td></tr>
+<tr><td>3교시</td><td>사회</td><td>수학</td><td class="weekSpecial">과학</td><td>사회</td><td class="weekSpecial">미술</td></tr>
+<tr><td>4교시</td><td>수학</td><td>실과</td><td>사회</td><td>실과</td><td>수학</td></tr>
+<tr><td>5교시</td><td class="weekSpecial">체육</td><td class="weekSpecial">영어</td><td>창체</td><td class="weekSpecial">음악</td><td class="weekSpecial">영어</td></tr>
+<tr><td>6교시</td><td class="weekSpecial">음악</td><td class="weekSpecial">체육(다)</td><td>-</td><td class="weekSpecial">체육</td><td>창체</td></tr>
+</table>
+</div>
+</div>
+
+<script>
+const API_KEY="fa9fe37b9be14839fe6774643939e974";
+let currentCondition = "default"; 
+
+// The schedule is mapped exactly to the image provided
+const schedule = {
+  Monday: ["과학", "국어", "사회", "수학", "체육", "음악"],
+  Tuesday: ["국어", "국어", "수학", "실과", "영어", "체육(다)"],
+  Wednesday: ["도덕", "영어(B)", "과학", "사회", "창체", null],
+  Thursday: ["과학", "국어", "사회", "실과", "음악", "체육"],
+  Friday: ["국어", "미술", "미술", "수학", "영어", "창체"]
+};
+
+// Map of which indices (0-5) are highlighted gray for each day
+const highlightedIndices = {
+    Monday: [0, 4, 5],
+    Tuesday: [4, 5],
+    Wednesday: [1, 2],
+    Thursday: [0, 4, 5],
+    Friday: [1, 2, 4]
+};
+
+const dayNames = {
+  Monday: "월요일", Tuesday: "화요일", Wednesday: "수요일",
+  Thursday: "목요일", Friday: "금요일", Saturday: "토요일", Sunday: "일요일"
+};
+
+const now = new Date();
+const todayEn = now.toLocaleDateString('en-US', { weekday: 'long' });
+const currentMinsTotal = now.getHours() * 60 + now.getMinutes();
+
+document.getElementById("today").textContent = `✨ ${dayNames[todayEn] || todayEn} ✨`;
+
+const blocks = [
+    { type: "prep", label: "등교 및 준비", start: "08:30", end: "09:00" },
+    { type: "class", label: "1교시", start: "09:00", end: "09:40" },
+    { type: "break", label: "쉬는 시간", start: "09:40", end: "09:50" },
+    { type: "class", label: "2교시", start: "09:50", end: "10:30" },
+    { type: "break", label: "쉬는 시간", start: "10:30", end: "10:40" },
+    { type: "class", label: "3교시", start: "10:40", end: "11:20" },
+    { type: "break", label: "쉬는 시간", start: "11:20", end: "11:30" },
+    { type: "class", label: "4교시", start: "11:30", end: "12:10" },
+    { type: "lunch", label: "점심 시간", start: "12:10", end: "13:10" },
+    { type: "class", label: "5교시", start: "13:10", end: "13:50" },
+    { type: "break", label: "쉬는 시간", start: "13:50", end: "14:00" },
+    { type: "class", label: "6교시", start: "14:00", end: "14:40" },
+    { type: "prep", label: "방과후 업무", start: "14:40", end: "16:30" }
+];
+
+const table = document.getElementById("scheduleTable");
+const isWeekendView = (todayEn === "Saturday" || todayEn === "Sunday") || (todayEn === "Friday" && currentMinsTotal >= (16*60+30));
+
+if (isWeekendView) {
+  table.innerHTML = "<tr><td colspan='2' style='font-size:22px; padding:30px;'>🕯️ 평온한 주말 🕯️</td></tr>";
+} else {
+  let classIndex = 0;
+  blocks.forEach((b) => {
+    if (b.type === "break") return;
+    let row = document.createElement("tr");
+    row.dataset.start = b.start; row.dataset.end = b.end;
+    let p = document.createElement("td");
+    let timeSpan = document.createElement("span");
+    timeSpan.className = "periodTime"; timeSpan.textContent = `${b.start}-${b.end}`;
+    p.appendChild(timeSpan); p.appendChild(document.createTextNode(b.label));
+    let c = document.createElement("td");
+    
+    if (b.type === "class") {
+        const subject = (schedule[todayEn] || [])[classIndex] || "-";
+        c.textContent = subject;
+        
+        // Apply highlight if this specific period was gray in the image
+        if (highlightedIndices[todayEn] && highlightedIndices[todayEn].includes(classIndex)) {
+            row.classList.add("specialClass");
+        }
+        classIndex++;
+    } else if (b.type === "lunch") {
+        c.innerHTML = '<span class="lunchText">즐거운 점심 🍛</span>';
+    } else if (b.type === "prep") {
+        c.textContent = b.label;
+        c.classList.add("prepPeriod");
+    }
+    row.appendChild(p); row.appendChild(c);
+    table.appendChild(row);
+  });
+}
+
+const canvas=document.getElementById("clock");
+const ctx=canvas.getContext("2d");
+function toMin(t){let[h,m]=t.split(":"); return h*60+parseInt(m);}
+
+let pulseGlow = 0;
+let pulseDir = 1;
+
+function drawClock() {
+    let now = new Date();
+    let mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    ctx.clearRect(0, 0, 300, 300);
+    ctx.beginPath(); ctx.arc(150, 150, 133, 0, Math.PI * 2); ctx.fillStyle = "white"; ctx.fill();
+
+    for (let i = 0; i < 60; i++) {
+        let angle = i * Math.PI / 30; let isMajor = i % 5 === 0;
+        let x1 = 150 + Math.cos(angle) * (125 - (isMajor?14:6)); let y1 = 150 + Math.sin(angle) * (125 - (isMajor?14:6));
+        let x2 = 150 + Math.cos(angle) * 125; let y2 = 150 + Math.sin(angle) * 125;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isMajor ? "#f2d98d" : "#fcf2d1"; ctx.lineWidth = isMajor ? 4 : 2; ctx.stroke();
+    }
+
+    let label = "휴식 시간 ✨";
+    let color = "#d1d1d1";
+    let total = 60;
+    let remain = 0;
+
+    let active = blocks.find(b => mins >= toMin(b.start) && mins < toMin(b.end));
+    if (active) {
+        label = active.label;
+        color = active.type === "class" ? "#f2b400" : (active.type === "prep" ? "#a3946d" : "#e0c060");
+        total = toMin(active.end) - toMin(active.start);
+        remain = toMin(active.end) - mins;
+    }
+
+    if (total > 0) {
+        let percent = Math.max(0, Math.min(1, remain / total));
+        
+        pulseGlow += 0.4 * pulseDir;
+        if(pulseGlow > 16 || pulseGlow < 0) pulseDir *= -1;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(150, 150, 138, -Math.PI / 2, -Math.PI / 2 + (percent * 2 * Math.PI), false);
+        ctx.lineWidth = 12; ctx.strokeStyle = color; ctx.lineCap = "round";
+        ctx.shadowBlur = pulseGlow; ctx.shadowColor = color;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    let h = now.getHours(); let m = now.getMinutes().toString().padStart(2, "0");
+    let ampm = h >= 12 ? "오후" : "오전"; h = h % 12 || 12;
+    
+    ctx.fillStyle = "#7a6a41"; ctx.font = "bold 36px Arial"; ctx.textAlign = "center";
+    ctx.fillText(`${h}:${m}`, 150, 150);
+    ctx.font = "16px Arial";
+    ctx.fillText(ampm, 150, 175);
+
+    document.getElementById("periodLabel").textContent = label;
+    document.getElementById("periodLabel").style.color = color;
+
+    document.querySelectorAll("#scheduleTable tr").forEach(row => {
+        const start = row.dataset.start; const end = row.dataset.end;
+        if (start && end) {
+            row.classList.toggle("currentClass", (mins >= toMin(start) && mins < toMin(end)));
+        }
+    });
+}
+setInterval(drawClock, 50);
+
+function startEmojiRain() {
+  setInterval(() => {
+    const cur = new Date(); const day = cur.getDay(); const hr = cur.getHours();
+    const minsNow = hr * 60 + cur.getMinutes(); 
+    let mode = "OFF";
+    if (day === 5 && minsNow >= (16*60+30)) mode = "WEEKEND";
+    else if (day === 6) mode = "WEEKEND";
+    else if (day === 0) mode = (hr >= 21) ? "POO" : "WEEKEND";
+    if (mode === "OFF") return;
+    let emojis = ['🌼', '☀️', '🍋', '🐝', '✨']; 
+    if (mode === "POO") emojis = ['💩', '😭'];
+    else {
+        if (currentCondition === "Rain") emojis = ['☔', '💧', '☁️', '🐸'];
+        else if (currentCondition === "Snow") emojis = ['❄️', '⛄', '🤍', '🌬️'];
+    }
+    const e = document.createElement('div'); e.className = 'falling-emoji';
+    e.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    e.style.left = Math.random() * 100 + 'vw'; e.style.animationDuration = (Math.random() * 3 + 2) + 's';
+    document.body.appendChild(e); setTimeout(() => e.remove(), 5000);
+  }, 350);
+}
+startEmojiRain();
+
+async function loadWeather(){
+try{
+    const geoRes=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=Dangjin,KR&limit=1&appid=${API_KEY}`);
+    const geoData=await geoRes.json();
+    const res=await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${geoData[0].lat}&lon=${geoData[0].lon}&appid=${API_KEY}&units=metric`);
+    const data=await res.json();
+    currentCondition = data.weather[0].main; 
+    document.getElementById("weather").textContent=`🌥날씨: ${data.main.temp.toFixed(1)}°C`;
+}catch{ document.getElementById("weather").textContent="날씨 확인 불가 🌼"; }
+}
+loadWeather();
+
+async function loadAir(){
+try{
+    const geoRes=await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=Dangjin,KR&limit=1&appid=${API_KEY}`);
+    const geoData=await geoRes.json();
+    const res=await fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${geoData[0].lat}&lon=${geoData[0].lon}&appid=${API_KEY}`);
+    const data=await res.json();
+    const levels=["좋음 😊","보통 🙂","그저그럼 😐","나쁨 😷","매우나쁨 ☠️"];
+    document.getElementById("air").textContent=`😷미세먼지: ${levels[data.list[0].main.aqi-1]}`;
+}catch{ document.getElementById("air").textContent="미세먼지 확인 불가 😷"; }
+}
+loadAir();
+
+const weekPopup=document.getElementById("weekPopup");
+document.getElementById("today").onclick=()=>{ weekPopup.style.display="flex"; }
+weekPopup.onclick=()=>{ weekPopup.style.display="none"; }
+</script>
+</body>
+</html>
