@@ -43,10 +43,10 @@ table {
 th, td { padding: 10px; border-bottom: 1px solid #fffdf0; }
 th { color: white; background: #f2d98d; }
 
-/* The "Gray" Subjects Highlight from the Image - Warm Yellow */
-.specialClass { background: #fdf5d2 !important; color: #8a7316; font-weight: bold; }
+/* Font Color Change for Highlighted Classes (No background) */
+.specialClass td:nth-child(2) { color: #d4a017 !important; font-weight: bold; }
 
-.currentClass { background: #fff9e6 !important; border: 2px solid #f2d98d; font-weight: bold; box-shadow: inset 0 0 10px rgba(212, 160, 23, 0.1); }
+.currentClass { background: #fffdf0 !important; font-weight: bold; outline: 2px solid #f2d98d; }
 .prepPeriod { color: #a3946d !important; } 
 .lunchText { color: #f2b400; font-weight: bold; }
 .periodTime { font-size: 10px; color: #ccc; margin-right: 5px; display: none; }
@@ -64,8 +64,8 @@ th { color: white; background: #f2d98d; }
 #weekTable th { background: #fcf2d1; color: #7a6a41; padding: 8px; }
 #weekTable td { padding: 10px; border-top: 1px solid #fffdf0; font-size: 13px; }
 
-/* Styling for the popup version of special classes */
-.weekSpecial { background: #fdf5d2; font-weight: bold; }
+/* Styling for the popup version font colors */
+.weekSpecial { color: #d4a017; font-weight: bold; }
 </style>
 </head>
 
@@ -107,7 +107,6 @@ th { color: white; background: #f2d98d; }
 const API_KEY="fa9fe37b9be14839fe6774643939e974";
 let currentCondition = "default"; 
 
-// The schedule is mapped exactly to the image provided
 const schedule = {
   Monday: ["과학", "국어", "사회", "수학", "체육", "음악"],
   Tuesday: ["국어", "국어", "수학", "실과", "영어", "체육(다)"],
@@ -116,7 +115,6 @@ const schedule = {
   Friday: ["국어", "미술", "미술", "수학", "영어", "창체"]
 };
 
-// Map of which indices (0-5) are highlighted gray for each day
 const highlightedIndices = {
     Monday: [0, 4, 5],
     Tuesday: [4, 5],
@@ -156,7 +154,7 @@ const table = document.getElementById("scheduleTable");
 const isWeekendView = (todayEn === "Saturday" || todayEn === "Sunday") || (todayEn === "Friday" && currentMinsTotal >= (16*60+30));
 
 if (isWeekendView) {
-  table.innerHTML = "<tr><td colspan='2' style='font-size:22px; padding:30px;'>🕯️ 평온한 주말 🕯️</td></tr>";
+  table.innerHTML = "<tr><td colspan='2' style='font-size:22px; padding:30px; color:#baffc9;'>🌿 평온한 주말 🌿</td></tr>";
 } else {
   let classIndex = 0;
   blocks.forEach((b) => {
@@ -172,8 +170,6 @@ if (isWeekendView) {
     if (b.type === "class") {
         const subject = (schedule[todayEn] || [])[classIndex] || "-";
         c.textContent = subject;
-        
-        // Apply highlight if this specific period was gray in the image
         if (highlightedIndices[todayEn] && highlightedIndices[todayEn].includes(classIndex)) {
             row.classList.add("specialClass");
         }
@@ -199,6 +195,8 @@ let pulseDir = 1;
 function drawClock() {
     let now = new Date();
     let mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    let isWeekend = (todayEn === "Saturday" || todayEn === "Sunday") || (todayEn === "Friday" && mins >= (16*60+30));
+    
     ctx.clearRect(0, 0, 300, 300);
     ctx.beginPath(); ctx.arc(150, 150, 133, 0, Math.PI * 2); ctx.fillStyle = "white"; ctx.fill();
 
@@ -210,22 +208,32 @@ function drawClock() {
         ctx.strokeStyle = isMajor ? "#f2d98d" : "#fcf2d1"; ctx.lineWidth = isMajor ? 4 : 2; ctx.stroke();
     }
 
-    let label = "휴식 시간 ✨";
-    let color = "#d1d1d1";
+    let label = "자유 시간 ✨";
+    let color = "#baffc9"; // Weekend Green default
     let total = 60;
     let remain = 0;
 
-    let active = blocks.find(b => mins >= toMin(b.start) && mins < toMin(b.end));
-    if (active) {
-        label = active.label;
-        color = active.type === "class" ? "#f2b400" : (active.type === "prep" ? "#a3946d" : "#e0c060");
-        total = toMin(active.end) - toMin(active.start);
-        remain = toMin(active.end) - mins;
+    if (!isWeekend) {
+        let active = blocks.find(b => mins >= toMin(b.start) && mins < toMin(b.end));
+        if (active) {
+            label = active.label;
+            // Pastel Logic: Class=Red/Pink, Break=Blue, Prep=Gray, Lunch=Yellow
+            if (active.type === "class") color = "#ffb3ba"; 
+            else if (active.type === "break") color = "#bae1ff";
+            else if (active.type === "prep") color = "#d3d3d3";
+            else if (active.type === "lunch") color = "#ffffba";
+            
+            total = toMin(active.end) - toMin(active.start);
+            remain = toMin(active.end) - mins;
+        } else {
+            // Gap between blocks or after school before weekend mode
+            label = "쉬는 시간 ✨";
+            color = "#bae1ff";
+        }
     }
 
     if (total > 0) {
         let percent = Math.max(0, Math.min(1, remain / total));
-        
         pulseGlow += 0.4 * pulseDir;
         if(pulseGlow > 16 || pulseGlow < 0) pulseDir *= -1;
 
@@ -241,7 +249,8 @@ function drawClock() {
     let h = now.getHours(); let m = now.getMinutes().toString().padStart(2, "0");
     let ampm = h >= 12 ? "오후" : "오전"; h = h % 12 || 12;
     
-    ctx.fillStyle = "#7a6a41"; ctx.font = "bold 36px Arial"; ctx.textAlign = "center";
+    ctx.fillStyle = color; // Countdown font matches block type color
+    ctx.font = "bold 36px Arial"; ctx.textAlign = "center";
     ctx.fillText(`${h}:${m}`, 150, 150);
     ctx.font = "16px Arial";
     ctx.fillText(ampm, 150, 175);
